@@ -28,7 +28,7 @@ Adafruit_SSD1306 oled(PIN_DC, PIN_RESET, PIN_CS);
 #define SHIPMAXSPEED 12
 #define BULLETTIME   20
 #define MAXBULLETS   10
-#define MAXROCKS      3
+#define MAXROCKS     27
 
 struct Propa {
   short x;
@@ -36,8 +36,10 @@ struct Propa {
   short angle;
   short   sig;
   short    sp;
-  short  tick;
+  short  tick; // timer vor bullets & maybe identify a smaller rock (?)
 };
+
+int score = 0;
 
 Propa ship;
 
@@ -104,10 +106,16 @@ void printBullets() {
 }
 
 void printRocks() {
-  for (int i=0; i < MAXROCKS; ++i) {  
-    //oled.drawBitmap(14,  5, rock0, 8, 4, WHITE);  
-    //oled.drawBitmap(54, 54, rock1, 8, 8, WHITE);    
-    oled.drawBitmap(rocks[i].x, rocks[i].y, rock2, 16,16, WHITE);
+  for (int i=0; i < MAXROCKS; ++i) {
+    if (rocks[i].tick < 0) continue; // hide
+     
+    if (rocks[i].tick == 0) {
+      oled.drawBitmap(rocks[i].x -7, rocks[i].y -7, rock2, 16,16, WHITE);          
+    } else if (rocks[i].tick == 1) {
+      oled.drawBitmap(rocks[i].x -4, rocks[i].y -4, rock1, 8,8, WHITE);
+    } else {
+      oled.drawBitmap(rocks[i].x -4, rocks[i].y -2, rock0, 8,4, WHITE);
+    }
 
     rocks[i].x = rocks[i].x + rocks[i].sp * cos(PI * rocks[i].angle/360.0);
     rocks[i].y = rocks[i].y + rocks[i].sp * sin(PI * rocks[i].angle/360.0);
@@ -116,7 +124,6 @@ void printRocks() {
     if (rocks[i].x >  oled.width()) rocks[i].x -= oled.width();
     if (rocks[i].y <             0) rocks[i].y += oled.height();
     if (rocks[i].y > oled.height()) rocks[i].y -= oled.height();
-
   }
 }
 
@@ -151,6 +158,37 @@ void printShip() {
   );
 }
 
+void collisions() {
+  for (int i=0; i < MAXBULLETS; ++i) {  
+    if (buls[i].tick < 0) continue;
+    
+    // bullet is active
+    for (int j=0; j < MAXROCKS; ++j) {
+      if (rocks[j].tick < 0) continue;
+      // is visible
+      if (
+        //(rocks[j].x == buls[i].x && rocks[j].y == buls[i].y)
+        rocks[j].x >= (buls[i].x-3) && rocks[j].x <= (buls[i].x+3) &&
+        rocks[j].y >= (buls[i].y-3) && rocks[j].y <= (buls[i].y+3)
+      ) {
+        score += 5 * rocks[j].sp + 3 * rocks[j].tick; // if rock is fast and small -> more score!
+        rocks[j].tick++;
+        if (rocks[j].tick == 3) rocks[j].tick = -1; // 3 hits? -> make it disapear
+      }          
+    }
+    
+    oled.drawPixel(buls[i].x, buls[i].y, WHITE);
+    buls[i].tick++;
+    buls[i].x = buls[i].x - buls[i].sig * buls[i].sp * cos(PI * buls[i].angle/360.0);
+    buls[i].y = buls[i].y - buls[i].sig * buls[i].sp * sin(PI * buls[i].angle/360.0);
+    
+    if (buls[i].x <             0) buls[i].x += oled.width();
+    if (buls[i].x >  oled.width()) buls[i].x -= oled.width();
+    if (buls[i].y <             0) buls[i].y += oled.height();
+    if (buls[i].y > oled.height()) buls[i].y -= oled.height();
+  }
+}
+
 void setup() {
   pinMode(BTN_UP,   INPUT_PULLUP);
   pinMode(BTN_DOWN, INPUT_PULLUP);
@@ -169,8 +207,8 @@ void setup() {
   ship.sig=1;
 
   for (int i=0;i<MAXROCKS;++i) {
-    rocks[i].x = random(0, oled.width());
-    rocks[i].y = random(0, oled.height());
+    rocks[i].x = random(7, oled.width());
+    rocks[i].y = random(7, oled.height()-7);
     rocks[i].angle = 18 * random(0, 20);
     rocks[i].sp = random(1, 4);
   }
@@ -183,8 +221,6 @@ void setup() {
 
 void loop() {
   oled.clearDisplay();
-
-  printShip();
     
   if (digitalRead(BTN_UP) == LOW) {
     ship.sp++;
@@ -217,11 +253,14 @@ void loop() {
   if (ship.sp < 0)            ship.sp = 0;
   if (ship.sp > SHIPMAXSPEED) ship.sp = SHIPMAXSPEED;
   
-  printBullets();
   printRocks();
+  printBullets();
+  printShip();
+
+  collisions();
 
   oled.setCursor(0,0);
-  // score
+  oled.print(score);
   oled.display();
   
   delay(100);

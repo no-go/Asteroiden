@@ -13,6 +13,8 @@
 #define BTN_B        4 // unused
 #define BTN_SW       6 // unused
 
+#define BEEPER       5
+
 #define RANDIN       A7
 
 // OLED (11 -> MOSI/DIN, 13 ->SCK)
@@ -24,11 +26,11 @@ Adafruit_SSD1306 oled(PIN_DC, PIN_RESET, PIN_CS);
 // HARDWARE I2C: A4 -> SDA, A5 -> SCL
 //Adafruit_SSD1306 oled(PIN_RESET);
 
-#define SHIPSIZE      9
+#define SHIPSIZE     10
 #define SHIPMAXSPEED 12
 #define BULLETTIME   20
-#define MAXBULLETS   10
-#define MAXROCKS     27
+#define MAXBULLETS    7
+#define MAXROCKS     27 // 3*3*3
 
 struct Propa {
   short x;
@@ -42,11 +44,16 @@ struct Propa {
 int score = 0;
 
 Propa ship;
+byte fire = 0;
 
 Propa buls[MAXBULLETS];
 byte buid = 0;
 
 Propa rocks[MAXROCKS];
+
+static const uint8_t names[] = {'c', 'd', 'e', 'f', 'g', 'a', 'b', 'C'};  
+static const short   tones[] = {1915, 1700, 1519, 1432, 1275, 1136, 1014, 956};
+static const uint8_t melody[] = "2d2a1f2c2d2a2d2c2f2d2a2c";
 
 static const uint8_t PROGMEM rock0[] = {
 B01110000,
@@ -107,11 +114,11 @@ void printBullets() {
 
 void printRocks() {
   for (int i=0; i < MAXROCKS; ++i) {
-    if (rocks[i].tick < 0) continue; // hide
+    if (rocks[i].tick <= 0) continue; // hide
      
-    if (rocks[i].tick == 0) {
+    if (rocks[i].tick == 1) {
       oled.drawBitmap(rocks[i].x -7, rocks[i].y -7, rock2, 16,16, WHITE);          
-    } else if (rocks[i].tick == 1) {
+    } else if (rocks[i].tick == 2) {
       oled.drawBitmap(rocks[i].x -4, rocks[i].y -4, rock1, 8,8, WHITE);
     } else {
       oled.drawBitmap(rocks[i].x -4, rocks[i].y -2, rock0, 8,4, WHITE);
@@ -164,7 +171,7 @@ void collisions() {
     
     // bullet is active
     for (int j=0; j < MAXROCKS; ++j) {
-      if (rocks[j].tick < 0) continue;
+      if (rocks[j].tick <= 0) continue;
       // is visible
       if (
         //(rocks[j].x == buls[i].x && rocks[j].y == buls[i].y)
@@ -173,7 +180,24 @@ void collisions() {
       ) {
         score += 5 * rocks[j].sp + 3 * rocks[j].tick; // if rock is fast and small -> more score!
         rocks[j].tick++;
-        if (rocks[j].tick == 3) rocks[j].tick = -1; // 3 hits? -> make it disapear
+        rocks[j].angle += 15;
+        if (rocks[j].tick == 2) {
+          rocks[j+3] = rocks[j];
+          rocks[j+3].angle += 100;
+          rocks[j+3].x += 5;
+          rocks[j+6] = rocks[j];
+          rocks[j+6].angle -= 100;
+          rocks[j+6].y += 5;
+        }
+        if (rocks[j].tick == 3) {
+          rocks[j+1] = rocks[j];
+          rocks[j+1].angle += 120;
+          rocks[j+1].x += 5;
+          rocks[j+2] = rocks[j];
+          rocks[j+2].angle -= 120;
+          rocks[j+2].y += 5;
+        }
+        if (rocks[j].tick == 4) rocks[j].tick = -1; // 3 hits? -> make it disapear
       }          
     }
     
@@ -200,26 +224,52 @@ void setup() {
   
   randomSeed(analogRead(RANDIN));
 
-  ship.x=64;
-  ship.y=32;
+  ship.x=oled.width()/2;
+  ship.y=oled.height()/2;
   ship.angle=180;
   ship.sp=0;
   ship.sig=1;
 
-  for (int i=0;i<MAXROCKS;++i) {
+  for (int i=0; i<MAXROCKS; i += 9) { // 0,9,18
     rocks[i].x = random(7, oled.width());
     rocks[i].y = random(7, oled.height()-7);
     rocks[i].angle = 18 * random(0, 20);
     rocks[i].sp = random(1, 4);
+    rocks[i].tick = 1;
   }
   
   oled.begin(SSD1306_SWITCHCAPVCC); // SPI
   // oled.begin(SSD1306_SWITCHCAPVCC, 0x3C); // i2c
   oled.setTextColor(WHITE);
   oled.setTextSize(1);
+  oled.clearDisplay();
+  oled.setCursor(oled.width()/2,oled.height()/2);
+  printShip();
+  oled.print(" STEROIDEN");
+  oled.display();
+  
+  byte count  = 0;
+  byte count2 = 0;
+  byte count3 = 0;
+  for (count = 0; count < 12; count++) {
+    for (count3 = 0; count3 <= (melody[count*2] - 48) * 30; count3++) {
+      for (count2=0;count2<8;count2++) {
+        if (names[count2] == melody[count*2 + 1]) {      
+          analogWrite(BEEPER, 500);
+          delayMicroseconds(tones[count2]);
+          analogWrite(BEEPER, 0);
+          delayMicroseconds(tones[count2]);
+        }
+      }
+    }
+  }  
 }
 
+short freq;
+
 void loop() {
+  analogWrite(BEEPER, 0);
+  
   oled.clearDisplay();
     
   if (digitalRead(BTN_UP) == LOW) {
@@ -234,12 +284,23 @@ void loop() {
   if (digitalRead(BTN_LEFT) == LOW) {
     ship.angle-=10;
   }
+
   if (digitalRead(BTN_A) == LOW) {
+    fire++;
+  } else {
+    fire = 0;
+  }
+
+  if (fire > 3) {
+    analogWrite(BEEPER, 500);
+    delayMicroseconds(1915);
+    
     buls[buid] = ship;
     buls[buid].sp += 3;
     buls[buid].tick = 1;
     buid++;
     if (buid >= MAXBULLETS) buid=0;
+    fire = 0;
   }
     
   if (ship.angle < 0) {

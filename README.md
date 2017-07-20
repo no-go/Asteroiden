@@ -1,6 +1,6 @@
 # Asteroiden
 
-This is an Asteroids clone (1979 Arcade game) for Arduino and an old Joystick (C64).
+This is a very simple Asteroids clone (1979 Arcade game) for Arduino Pro Mini (8MHz, 3.3V) and an old Joystick (C64).
 
 ## Feature
 

@@ -1,6 +1,9 @@
 #include <SPI.h> //SPI Arduino Library
 //#include <Wire.h> //I2C Arduino Library
 
+#include <EEPROM.h>
+int eeAddress = 1;
+
 #include <Adafruit_GFX.h>
 #include "Adafruit_SSD1306.h"
 
@@ -31,6 +34,7 @@ Adafruit_SSD1306 oled(PIN_DC, PIN_RESET, PIN_CS);
 #define BULLETTIME   20
 #define MAXBULLETS    7
 #define MAXROCKS     27 // 3*3*3
+#define MAXLIVES     3
 
 struct Propa {
   short x;
@@ -41,13 +45,17 @@ struct Propa {
   short  tick; // timer vor bullets & maybe identify a smaller rock (?)
 };
 
-int score = 0;
+byte    lives = MAXLIVES;
+int     score = 0;
+int highscore = 0;
+bool died = false;
 
 Propa ship;
-byte fire = 0;
 
 Propa buls[MAXBULLETS];
 byte buid = 0;
+
+short freq;
 
 Propa rocks[MAXROCKS];
 
@@ -92,6 +100,14 @@ B00000000,B01001000,
 B00000000,B00110000
 };
 
+inline void shipInit() {
+  ship.x=oled.width()/2;
+  ship.y=oled.height()/2;
+  ship.angle=180;
+  ship.sp=0;
+  ship.sig=1;  
+}
+
 void printBullets() {
   for (int i=0; i < MAXBULLETS; ++i) {  
     if (buls[i].tick > BULLETTIME) {
@@ -112,10 +128,21 @@ void printBullets() {
   }
 }
 
-void printRocks() {
+bool printRocks() {
   for (int i=0; i < MAXROCKS; ++i) {
     if (rocks[i].tick <= 0) continue; // hide
-     
+
+    // ------------------ ship collision?
+      if (
+        rocks[i].x >= (ship.x-3) && rocks[i].x <= (ship.x+3) &&
+        rocks[i].y >= (ship.y-3) && rocks[i].y <= (ship.y+3)
+      ) {
+        shipInit();
+        lives--;
+        if (lives == 0) return true;
+      }
+    // ------------------ ship collision? END
+    
     if (rocks[i].tick == 1) {
       oled.drawBitmap(rocks[i].x -7, rocks[i].y -7, rock2, 16,16, WHITE);          
     } else if (rocks[i].tick == 2) {
@@ -132,6 +159,80 @@ void printRocks() {
     if (rocks[i].y <             0) rocks[i].y += oled.height();
     if (rocks[i].y > oled.height()) rocks[i].y -= oled.height();
   }
+  return false;
+}
+
+inline void printLives() {
+  for (int i=1; i<=MAXLIVES; ++i) {
+    if (i <= lives) {
+      oled.setCursor(oled.width()-(i*8), 0);
+      oled.print('A');
+    }
+  }
+}
+
+void startGame() {
+  score = 0;
+  lives = MAXLIVES;
+  buid = 0;
+  EEPROM.get(eeAddress, highscore);
+  
+  shipInit();
+  
+  oled.clearDisplay();
+  oled.setCursor(0, 0);
+  oled.print("Highscore: ");
+  oled.print(highscore);
+  
+  oled.setCursor(oled.width()/2,oled.height()/2);
+  printShip();
+  oled.print(" STEROIDEN");
+  oled.display();
+  
+  for (int i=0; i<MAXROCKS; ++i) { // 0,9,18
+    rocks[i].x = random(7, oled.width());
+    rocks[i].y = random(7, oled.height()-7);
+    rocks[i].angle = 18 * random(0, 20);
+    rocks[i].sp = random(1, 4);
+    rocks[i].tick = -1; // hidden
+    if (i%9 == 0) rocks[i].tick = 1; // 0,9,18 not hidden
+  }
+  
+  byte count  = 0;
+  byte count2 = 0;
+  byte count3 = 0;
+  for (count = 0; count < 12; count++) {
+    for (count3 = 0; count3 <= (melody[count*2] - 48) * 30; count3++) {
+      for (count2=0;count2<8;count2++) {
+        if (names[count2] == melody[count*2 + 1]) {      
+          analogWrite(BEEPER, 500);
+          delayMicroseconds(tones[count2]);
+          analogWrite(BEEPER, 0);
+          delayMicroseconds(tones[count2]);
+        }
+      }
+    }
+  }
+  delay(1000);
+}
+
+inline void gameOver() {
+  for( int i=0;i<500;++i) {
+    analogWrite(BEEPER, 500);
+    delayMicroseconds(600+i);
+    analogWrite(BEEPER, 0);
+    delayMicroseconds(600+i);
+  }
+  oled.clearDisplay();
+  oled.setCursor(oled.width()/2 -26,oled.height()/2 - 6);
+  oled.print("Game Over");
+  oled.display();
+  delay(1000);
+  oled.setCursor(oled.width()/2 -29,oled.height()/2 + 6);
+  oled.print("Score: ");
+  oled.print(score);
+  oled.display();
+  delay(6000);
 }
 
 void printShip() {
@@ -178,7 +279,7 @@ void collisions() {
         rocks[j].x >= (buls[i].x-3) && rocks[j].x <= (buls[i].x+3) &&
         rocks[j].y >= (buls[i].y-3) && rocks[j].y <= (buls[i].y+3)
       ) {
-        score += 5 * rocks[j].sp + 3 * rocks[j].tick; // if rock is fast and small -> more score!
+        score += 3 * ship.sp + 3 * rocks[j].tick; // if ship is fast and small -> more score!
         rocks[j].tick++;
         rocks[j].angle += 15;
         if (rocks[j].tick == 2) {
@@ -223,49 +324,14 @@ void setup() {
   pinMode(BTN_SW,   INPUT);
   
   randomSeed(analogRead(RANDIN));
-
-  ship.x=oled.width()/2;
-  ship.y=oled.height()/2;
-  ship.angle=180;
-  ship.sp=0;
-  ship.sig=1;
-
-  for (int i=0; i<MAXROCKS; i += 9) { // 0,9,18
-    rocks[i].x = random(7, oled.width());
-    rocks[i].y = random(7, oled.height()-7);
-    rocks[i].angle = 18 * random(0, 20);
-    rocks[i].sp = random(1, 4);
-    rocks[i].tick = 1;
-  }
   
   oled.begin(SSD1306_SWITCHCAPVCC); // SPI
   // oled.begin(SSD1306_SWITCHCAPVCC, 0x3C); // i2c
   oled.setTextColor(WHITE);
   oled.setTextSize(1);
-  oled.clearDisplay();
-  oled.setCursor(oled.width()/2,oled.height()/2);
-  printShip();
-  oled.print(" STEROIDEN");
-  oled.display();
-  
-  byte count  = 0;
-  byte count2 = 0;
-  byte count3 = 0;
-  for (count = 0; count < 12; count++) {
-    for (count3 = 0; count3 <= (melody[count*2] - 48) * 30; count3++) {
-      for (count2=0;count2<8;count2++) {
-        if (names[count2] == melody[count*2 + 1]) {      
-          analogWrite(BEEPER, 500);
-          delayMicroseconds(tones[count2]);
-          analogWrite(BEEPER, 0);
-          delayMicroseconds(tones[count2]);
-        }
-      }
-    }
-  }  
-}
 
-short freq;
+  startGame();
+}
 
 void loop() {
   analogWrite(BEEPER, 0);
@@ -286,12 +352,6 @@ void loop() {
   }
 
   if (digitalRead(BTN_A) == LOW) {
-    fire++;
-  } else {
-    fire = 0;
-  }
-
-  if (fire > 3) {
     analogWrite(BEEPER, 500);
     delayMicroseconds(1915);
     
@@ -300,7 +360,6 @@ void loop() {
     buls[buid].tick = 1;
     buid++;
     if (buid >= MAXBULLETS) buid=0;
-    fire = 0;
   }
     
   if (ship.angle < 0) {
@@ -314,9 +373,10 @@ void loop() {
   if (ship.sp < 0)            ship.sp = 0;
   if (ship.sp > SHIPMAXSPEED) ship.sp = SHIPMAXSPEED;
   
-  printRocks();
+  died = printRocks();
   printBullets();
   printShip();
+  printLives();
 
   collisions();
 
@@ -324,5 +384,10 @@ void loop() {
   oled.print(score);
   oled.display();
   
-  delay(100);
+  delay(60);
+  if (died) {
+    gameOver();
+    if (score > highscore) EEPROM.put(eeAddress, score);
+    startGame();
+  }
 }

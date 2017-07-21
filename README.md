@@ -4,6 +4,12 @@ This is a very simple Asteroids clone (1979 Arcade game) for Arduino Pro Mini (8
 
 ![Picture of game](image2.jpg)
 
+Support me: [Flattr This](https://flattr.com/submit/auto?fid=o6wo7q&url=https%3A%2F%2Fgithub.com%2Fno-go%2FAsteroiden)
+
+Source Code: [https://github.com/no-go/Asteroiden](https://github.com/no-go/Asteroiden)
+
+Website: [https://no-go.github.io/Asteroiden](https://no-go.github.io/Asteroiden)
+
 ## Feature
 
 - a intro melody (not original)

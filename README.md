@@ -11,6 +11,7 @@ This is a very simple Asteroids clone (1979 Arcade game) for Arduino Pro Mini (8
 - Game Over screen with your score
 - random speed and start position of the rocks
 - Game Over fail sound (not original)
+- You shot everything? Get 1000 points for each live, get a new bonus live and the game starts again with this score
 
 ## Picture
 

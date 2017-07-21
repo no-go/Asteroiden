@@ -34,7 +34,7 @@ Adafruit_SSD1306 oled(PIN_DC, PIN_RESET, PIN_CS);
 #define BULLETTIME   20
 #define MAXBULLETS    7
 #define MAXROCKS     27 // 3*3*3
-#define MAXLIVES     3
+#define MAXLIVES      3
 
 struct Propa {
   short x;
@@ -48,7 +48,7 @@ struct Propa {
 byte    lives = MAXLIVES;
 int     score = 0;
 int highscore = 0;
-bool died = false;
+byte     died = 0;
 
 Propa ship;
 
@@ -128,10 +128,12 @@ void printBullets() {
   }
 }
 
-bool printRocks() {
+byte printRocks() {
+  bool allHidden = true;
   for (int i=0; i < MAXROCKS; ++i) {
     if (rocks[i].tick <= 0) continue; // hide
-
+    allHidden = false;
+    
     // ------------------ ship collision?
       if (
         rocks[i].x >= (ship.x-3) && rocks[i].x <= (ship.x+3) &&
@@ -139,7 +141,7 @@ bool printRocks() {
       ) {
         shipInit();
         lives--;
-        if (lives == 0) return true;
+        if (lives == 0) return 1; // you die
       }
     // ------------------ ship collision? END
     
@@ -159,21 +161,18 @@ bool printRocks() {
     if (rocks[i].y <             0) rocks[i].y += oled.height();
     if (rocks[i].y > oled.height()) rocks[i].y -= oled.height();
   }
-  return false;
+  if (allHidden) return 2; // everything is hidden -> well done
+  return 0;
 }
 
 inline void printLives() {
-  for (int i=1; i<=MAXLIVES; ++i) {
-    if (i <= lives) {
-      oled.setCursor(oled.width()-(i*8), 0);
-      oled.print('A');
-    }
+  for (int i=lives; i>0; --i) {
+    oled.setCursor(oled.width()-(i*8), 0);
+    oled.print('A');
   }
 }
 
 void startGame() {
-  score = 0;
-  lives = MAXLIVES;
   buid = 0;
   EEPROM.get(eeAddress, highscore);
   
@@ -227,12 +226,42 @@ inline void gameOver() {
   oled.setCursor(oled.width()/2 -26,oled.height()/2 - 6);
   oled.print("Game Over");
   oled.display();
-  delay(1000);
-  oled.setCursor(oled.width()/2 -29,oled.height()/2 + 6);
+  delay(800);
+  oled.setCursor(oled.width()/2 -31,oled.height()/2 + 6);
   oled.print("Score: ");
   oled.print(score);
   oled.display();
-  delay(6000);
+  delay(3000);
+}
+
+inline void wellDone() {
+  for(int i=0; i<500; ++i) {
+    analogWrite(BEEPER, 500);
+    delayMicroseconds(1200-i);
+    analogWrite(BEEPER, 0);
+    delayMicroseconds(1200-i);
+  }
+  oled.clearDisplay();
+  oled.setCursor(oled.width()/2 -26,oled.height()/2 - 6);
+  oled.print("Well done!");
+  oled.display();
+  delay(800);
+  
+  oled.setCursor(oled.width()/2 -30,oled.height()/2 + 6);
+  oled.print("Score: ");
+  oled.print(score);
+  oled.display();
+  delay(1000);
+  
+  for (int i=0; i<lives; ++i) {
+    oled.clearDisplay();
+    oled.setCursor(oled.width()/2 -31,oled.height()/2 + 6);
+    score += 1000;
+    oled.print("Score: ");
+    oled.print(score);
+    oled.display();
+    delay(1000);  
+  }
 }
 
 void printShip() {
@@ -385,9 +414,17 @@ void loop() {
   oled.display();
   
   delay(60);
-  if (died) {
+  if (died == 1) {
     gameOver();
     if (score > highscore) EEPROM.put(eeAddress, score);
+    score = 0;
+    lives = MAXLIVES;
+    startGame();
+  }
+  if (died == 2) {
+    wellDone();
+    if (score > highscore) EEPROM.put(eeAddress, score);
+    lives++;
     startGame();
   }
 }

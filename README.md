@@ -2,6 +2,8 @@
 
 This is a very simple Asteroids clone (1979 Arcade game) for Arduino Pro Mini (8MHz, 3.3V) and an old Joystick (C64).
 
+![Picture of game](image2.jpg)
+
 ## Feature
 
 - a intro melody (not original)

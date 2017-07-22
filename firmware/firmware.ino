@@ -17,6 +17,7 @@ int eeAddress = 1;
 #define BTN_SW       6 // unused
 
 #define BEEPER       5
+#define HITLED      A2
 
 #define RANDIN       A7
 
@@ -141,6 +142,9 @@ byte printRocks() {
       ) {
         shipInit();
         lives--;
+        digitalWrite(HITLED, HIGH);
+        delay(500);
+        digitalWrite(HITLED, LOW);
         if (lives == 0) return 1; // you die
       }
     // ------------------ ship collision? END
@@ -351,6 +355,7 @@ void setup() {
   pinMode(BTN_A,    INPUT_PULLUP);
   pinMode(BTN_B,    INPUT_PULLUP);
   pinMode(BTN_SW,   INPUT);
+  pinMode(HITLED,   OUTPUT);
   
   randomSeed(analogRead(RANDIN));
   
